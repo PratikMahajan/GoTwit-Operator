@@ -1,0 +1,7 @@
+apiVersion: twt.args.sh/v1alpha1
+kind: GoTwit
+metadata:
+  name: example-gotwit
+spec:
+  # Add fields here
+  size: 3

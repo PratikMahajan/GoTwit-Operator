@@ -1,4 +1,4 @@
-module GoTwit-Operator
+module github.com/pratikmahajan/GoTwit-Operator
 
 go 1.13
 
