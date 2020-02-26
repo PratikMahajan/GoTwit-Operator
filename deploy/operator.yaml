@@ -16,7 +16,7 @@ spec:
       containers:
         - name: gotwit-operator
           # Replace this with the built image name
-          image: REPLACE_IMAGE
+          image: quay.io/pratikmahajan/gotwt-operator:lat-2
           command:
           - gotwit-operator
           imagePullPolicy: Always

@@ -13,9 +13,9 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	"k8s.io/client-go/rest"
 
-	"GoTwit-Operator/pkg/apis"
-	"GoTwit-Operator/pkg/controller"
-	"GoTwit-Operator/version"
+	"github.com/pratikmahajan/GoTwit-Operator/pkg/apis"
+	"github.com/pratikmahajan/GoTwit-Operator/pkg/controller"
+	"github.com/pratikmahajan/GoTwit-Operator/version"
 
 	"github.com/operator-framework/operator-sdk/pkg/k8sutil"
 	kubemetrics "github.com/operator-framework/operator-sdk/pkg/kube-metrics"
