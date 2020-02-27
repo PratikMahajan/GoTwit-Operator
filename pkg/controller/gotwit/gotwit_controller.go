@@ -6,9 +6,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/client-go/kubernetes/scheme"
 	"reflect"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
+	routev1 "github.com/openshift/api/route/v1"
 	twtv1alpha1 "github.com/pratikmahajan/GoTwit-Operator/pkg/apis/twt/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -104,6 +106,7 @@ func (r *ReconcileGoTwit) Reconcile(request reconcile.Request) (reconcile.Result
 		return reconcile.Result{}, err
 	}
 
+	//..................................................................................................................
 	// create a new deployment
 	deployment := r.newGoTwtDeployment(instance)
 
@@ -126,6 +129,7 @@ func (r *ReconcileGoTwit) Reconcile(request reconcile.Request) (reconcile.Result
 		return reconcile.Result{}, err
 	}
 
+	//..................................................................................................................
 	// create a new service
 	service := r.newServiceForGoTwt(instance)
 
@@ -147,6 +151,40 @@ func (r *ReconcileGoTwit) Reconcile(request reconcile.Request) (reconcile.Result
 		reqLogger.Error(err, "Failed to get Service")
 		return reconcile.Result{}, err
 	}
+
+	//..................................................................................................................
+	// Creating a new route
+
+	// Register operator types with the runtime scheme.
+	s := scheme.Scheme
+
+	//Add route Openshift scheme
+	if err := routev1.Install(s); err != nil {
+		reqLogger.Error(err,"Unable to add route scheme")
+	}
+
+	route := r.newRouteForGoTwt(instance, service)
+
+	// check if the route already exists
+	routeFound := &routev1.Route{}
+	err = r.client.Get(context.TODO(), types.NamespacedName{Name: route.Name, Namespace:route.Namespace}, routeFound )
+	if err != nil && errors.IsNotFound(err){
+		// define a new route
+		rt := r.newRouteForGoTwt(instance, service)
+		reqLogger.Info("Creating a new Route", "Route.Namespace", rt.Namespace, "Route.Name", rt.Name)
+		err = r.client.Create(context.TODO(), rt)
+		if err != nil {
+			reqLogger.Error(err, "Failed to create new Route", "Route.Namespace", rt.Namespace, "Route.Name", rt.Name)
+			return reconcile.Result{}, err
+		}
+		// Route created successfully - return and requeue
+		return reconcile.Result{Requeue: true}, nil
+	} else if err != nil {
+		reqLogger.Error(err, "Failed to get Route")
+		return reconcile.Result{}, err
+	}
+
+	//..................................................................................................................
 
 	size := instance.Spec.Size
 	if *found.Spec.Replicas != size{
@@ -284,7 +322,7 @@ func (r *ReconcileGoTwit) newGoTwtDeployment(gt *twtv1alpha1.GoTwit )  *appsv1.D
 
 // Returns a new service
 func (r *ReconcileGoTwit) newServiceForGoTwt(gt *twtv1alpha1.GoTwit) *corev1.Service {
-	log.Info(fmt.Sprintf("Initiating deployment"))
+	log.Info(fmt.Sprintf("Initiating Service"))
 	ls := labelsForInstance(gt.Name)
 
 	Service := &corev1.Service{
@@ -316,4 +354,42 @@ func (r *ReconcileGoTwit) newServiceForGoTwt(gt *twtv1alpha1.GoTwit) *corev1.Ser
 		log.Error(err, fmt.Sprintf( "error setting service as owner and controller"))
 	}
 	return Service
+}
+
+func (r *ReconcileGoTwit) newRouteForGoTwt(gt *twtv1alpha1.GoTwit, service *corev1.Service) *routev1.Route{
+	log.Info(fmt.Sprintf("Initiating Route"))
+	ls := labelsForInstance(gt.Name)
+
+
+	Route := &routev1.Route{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "route.openshift.io/v1",
+			Kind:       "Route",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "route-" + gt.Name,
+			Namespace: gt.Namespace,
+			Labels: ls,
+		},
+		Spec: routev1.RouteSpec{
+			To: routev1.RouteTargetReference{
+				Kind:   "Service",
+				Name:   service.Name,
+			},
+			Port: &routev1.RoutePort{
+				TargetPort: intstr.FromString("http"),
+			},
+			TLS: &routev1.TLSConfig{
+				Termination: "edge",
+			},
+		},
+	}
+
+	// set gotwt instance as owner and controller of Route
+	err := controllerutil.SetControllerReference(gt, Route, r.scheme)
+	if err != nil {
+		log.Error(err, fmt.Sprintf( "error setting route as owner and controller"))
+	}
+
+	return Route
 }
